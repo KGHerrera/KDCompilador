@@ -1,0 +1,6 @@
+num !ent1 = 20;
+num !ent2 = 10;
+
+sumar(!ent2, 20);
+
+
