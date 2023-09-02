@@ -1,6 +1,6 @@
-num !ent1 = 20;
-num !ent2 = 10;
+num !num1 = 10;
+num !num2 = 20;
 
-sumar(!ent2, 20);
+num !num3 = sumar(!num2, !num1);
 
-
+imp(!num1);

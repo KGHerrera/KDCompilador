@@ -41,6 +41,7 @@ public class Compilador extends javax.swing.JFrame {
     private Timer timerKeyReleased;
     private ArrayList<Production> identProd;
     private ArrayList<Production> funAritProd;
+    private ArrayList<Production> impProd;
     private HashMap<String, String> identificadores;
     private boolean codeHasBeenCompiled = false;
 
@@ -362,6 +363,7 @@ public class Compilador extends javax.swing.JFrame {
 
         identProd = new ArrayList<>();
         funAritProd = new ArrayList<>();
+        impProd = new ArrayList<>();
         identificadores = new HashMap<>();
 
 
@@ -409,7 +411,7 @@ public class Compilador extends javax.swing.JFrame {
         gramatica.group("LLAMAR_FUNCION_COMP_PC", "LLAMAR_FUNCION", 7, "error sintactico: falta el punto y coma al final de la declaracion de una funcion [#, %]");
 
         // imprimir
-        gramatica.group("IMPRIMIR_VALOR", "IMPRIMIR PARENTESIS_A VALOR PARENTESIS_C FIN_SENTENCIA", true);
+        gramatica.group("IMPRIMIR_VALOR", "IMPRIMIR PARENTESIS_A (VALOR | IDENTIFICADOR) PARENTESIS_C FIN_SENTENCIA", true, impProd);
 
         // funciones aritmeticas
         gramatica.group("OPERACION_ARITMETICA_COM_PC", "OPERACION_ARITMETICA FIN_SENTENCIA", true);
@@ -483,25 +485,113 @@ public class Compilador extends javax.swing.JFrame {
     }
 
     private void semanticAnalysis() {
+
         HashMap<String, String> identDataType = new HashMap<>();
         identDataType.put("num", "NUMERO");
         identDataType.put("bol", "BOOLEANO");
         identDataType.put("cad", "CADENA");
 
+        // Mapeo de tipos de datos a expresiones regulares
+        HashMap<String, String> tipoDatoExpresionRegular = new HashMap<>();
+        tipoDatoExpresionRegular.put("num", "-?\\d+");
+        tipoDatoExpresionRegular.put("bol", "ver|fal");
+        tipoDatoExpresionRegular.put("cad", "-?\\d+(\\.\\d+)?");
+
+        //** ------------------------------------------------------
+        // Correcta asignacion de variables y funciones aritmeticas
+        //** ------------------------------------------------------     
         for (Production id : identProd) {
             // solo para pruebas
             System.out.println(id.lexemeRank(0, -1)); // codigo del lenguaje
-            System.out.println(id.lexicalCompRank(0, -1)); // PALABRAS como NUMERO BOOLEANO
+            System.out.println(id.lexicalCompRank(0, -1)); // NUMERO BOOLEANO IDENTIFICADOR
             System.out.println("*");
             //--------------------------
 
-            if (!identDataType.get(id.lexemeRank(0)).equals(id.lexicalCompRank(-1))) {
+            boolean isIde = false;
+
+            if (id.lexicalCompRank(-1).equals("IDENTIFICADOR")) {
+                isIde = true;
+                if (!identificadores.containsKey(id.lexemeRank(-1))) {
+                    errors.add(new ErrorLSSL(1, "error semantico: la variable " + id.lexemeRank(-1) + " no ha sido declarada 2 [#, %]", id, true));
+                } else {
+                    String tipoDato = id.lexemeRank(0);
+                    String expresionRegular = tipoDatoExpresionRegular.get(tipoDato);
+                    String valor = identificadores.get(id.lexemeRank(-1));
+
+                    if (expresionRegular != null && valor != null && !valor.matches(expresionRegular)) {
+                        errors.add(new ErrorLSSL(1, "Error semántico: valor no compatible con el tipo de dato " + tipoDato + " [" + expresionRegular + "]", id, true));
+                    } else {
+                        System.out.println(valor);
+                        identificadores.put(id.lexemeRank(1), valor);
+                    }
+                }
+            }
+
+            boolean isFun = false;
+
+            if (id.lexicalCompRank(3).equals("FUNCION_ARITMETICA") && !isIde) {
+                isFun = true;
+                String val1 = "";
+                String val2 = "";
+
+                if (id.lexicalCompRank(5).equals("NUMERO")) {
+                    val1 = id.lexemeRank(5);
+                } else if (id.lexicalCompRank(5).equals("IDENTIFICADOR")) {
+                    if (!verificarIdentificador(id, 5)) {
+                        errors.add(new ErrorLSSL(1, "Error semántico: se esperaban tipos de datos de tipo NUMERO [#, %]", id, true));
+                    } else {
+                        val1 = identificadores.get(id.lexemeRank(5));
+                    }
+
+                }
+
+                if (id.lexicalCompRank(7).equals("NUMERO")) {
+                    val2 = id.lexemeRank(7);
+                } else if (id.lexicalCompRank(7).equals("IDENTIFICADOR")) {
+                    if (!verificarIdentificador(id, 7)) {
+                        errors.add(new ErrorLSSL(1, "Error semántico: se esperaban tipos de datos de tipo NUMERO [#, %]", id, true));
+                    } else {
+                        val2 = identificadores.get(id.lexemeRank(7));
+                    }
+                }
+
+                if (!val1.isEmpty() && !val2.isEmpty()) {
+                    double numero1 = Double.parseDouble(val1);
+                    double numero2 = Double.parseDouble(val2);
+                    double resultado = 0.0; // Inicializar el resultado
+
+                    // Realizar las operaciones según el operador
+                    if (id.lexemeRank(3).equals("sumar")) {
+                        resultado = numero1 + numero2;
+                    } else if (id.lexemeRank(3).equals("restar")) {
+                        resultado = numero1 - numero2;
+                    } else if (id.lexemeRank(3).equals("multiplicar")) {
+                        resultado = numero1 * numero2;
+                    } else if (id.lexemeRank(3).equals("dividir")) {
+                        if (numero2 != 0.0) {
+                            resultado = numero1 / numero2;
+                        } else {
+                            errors.add(new ErrorLSSL(1, "Error semántico: división entre cero [#, %]", id, true));
+                        }
+                    }
+
+                    // Guardar el resultado en el HashMap identificadores
+                    identificadores.put(id.lexemeRank(1), String.valueOf(resultado));
+                }
+
+            }
+
+            if (!identDataType.get(id.lexemeRank(0)).equals(id.lexicalCompRank(-1)) && !isIde && !isFun) {
                 errors.add(new ErrorLSSL(1, "error semantico: valor no compatible con el tipo de dato [#, %]", id, true));
-            } else {
+            } else if (!isIde && !isFun) {
                 identificadores.put(id.lexemeRank(1), id.lexemeRank(-1));
             }
-        }
 
+        }
+        
+        //** -----------------------------------------------
+        // Verificar si existen las variables para funciones
+        //** -----------------------------------------------
         for (Production funArit : funAritProd) {
             System.out.println(funArit.lexemeRank(0, -1)); // Código del lenguaje
             System.out.println(funArit.lexicalCompRank(0, -1)); // Palabras como NUMERO o BOOLEANO
@@ -514,21 +604,45 @@ public class Compilador extends javax.swing.JFrame {
             }
         }
 
+        //** ----------------------------------------------
+        // Verificar si la variable existe para impreciones
+        //** ----------------------------------------------
+        for (Production imp : impProd) {
+            System.out.println(imp.lexemeRank(0, -1)); // Código del lenguaje
+            System.out.println(imp.lexicalCompRank(0, -1)); // Palabras como NUMERO o BOOLEANO
+
+            if (imp.lexicalCompRank(2).equals("IDENTIFICADOR")) {
+                String variableName = imp.lexemeRank(2);
+                verificarExistenciaVariable(variableName, imp);                    
+            }
+
+        }
+
         // verificar que si se guarden los nombres de variables con su valor
         for (String key : identificadores.keySet()) {
             String value = identificadores.get(key);
             System.out.println("nombre variable: " + key + ", valor: " + value);
+
         }
+    }
+
+    private boolean verificarExistenciaVariable(String variableName, Production funArit) {
+        if (!identificadores.containsKey(variableName)) {
+            errors.add(new ErrorLSSL(1, "Error semántico: variable " + variableName + " no ha sido declarada", funArit, true));
+            return false;
+        }
+        return true;
     }
 
     private boolean verificarIdentificador(Production funArit, int index) {
         if (funArit.lexicalCompRank(index).equals("IDENTIFICADOR")) {
             String variableName = funArit.lexemeRank(index);
+
             if (!identificadores.containsKey(variableName)) {
                 errors.add(new ErrorLSSL(1, "Error semántico: variable " + variableName + " no ha sido declarada", funArit, true));
                 return false;
             } else {
-                return identificadores.get(variableName).matches("-?\\d+");
+                return identificadores.get(variableName).matches("-?\\d+(\\.\\d+)?");
             }
         }
         return true;
