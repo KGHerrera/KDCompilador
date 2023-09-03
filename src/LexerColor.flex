@@ -41,6 +41,9 @@ Numero = 0 | [1-9][0-9]*
 /* Identificador */
 "!"{Identificador} { return textColor(yychar, yylength(), new Color(72, 240, 117)); }
 
+/* cadenas */
+'[^']*' { return textColor(yychar, yylength(), new Color(186, 158, 175)); }
+
 /* Tipos de datos */
 num | bol | cad { return textColor(yychar, yylength(), new Color(215, 237, 128)); }
 

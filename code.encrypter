@@ -1,6 +1,19 @@
-num !num1 = 10;
-num !num2 = 20;
+cad !cad1 = 'omaga ai din ai diyin';
+cad !cad2 = !cad1;
 
-num !num3 = sumar(!num2, !num1);
+num !ent1 = 20;
+num !dec2 = 100;
+cad !cad = 'megamente';
 
-imp(!num1);
+sumar(10, !ent1);
+
+cic(!ent1){
+    cad !cad5 = 'megamente';
+    num !num2 = sumar(10, !ent1);
+
+    cic(!num2){
+        
+    }
+}
+
+imp(10);

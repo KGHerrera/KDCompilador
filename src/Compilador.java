@@ -1,6 +1,5 @@
 
-import com.formdev.flatlaf.FlatDarkLaf;
-import com.formdev.flatlaf.FlatIntelliJLaf;
+import com.formdev.flatlaf.intellijthemes.FlatDarkPurpleIJTheme;
 import compilerTools.CodeBlock;
 import javax.swing.UIManager;
 import javax.swing.UnsupportedLookAndFeelException;
@@ -13,6 +12,7 @@ import compilerTools.TextColor;
 import compilerTools.Token;
 import java.awt.Color;
 import java.awt.event.ActionEvent;
+import java.awt.event.KeyEvent;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.BufferedReader;
@@ -24,8 +24,16 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.HashMap;
+import javax.swing.AbstractAction;
+import javax.swing.ActionMap;
+import javax.swing.InputMap;
+import javax.swing.JComponent;
 import javax.swing.JOptionPane;
+import javax.swing.KeyStroke;
 import javax.swing.Timer;
+import javax.swing.text.BadLocationException;
+import javax.swing.text.Document;
+import javax.swing.text.JTextComponent;
 
 /**
  *
@@ -41,6 +49,7 @@ public class Compilador extends javax.swing.JFrame {
     private Timer timerKeyReleased;
     private ArrayList<Production> identProd;
     private ArrayList<Production> funAritProd;
+    private ArrayList<Production> cicProd;
     private ArrayList<Production> impProd;
     private HashMap<String, String> identificadores;
     private boolean codeHasBeenCompiled = false;
@@ -48,6 +57,24 @@ public class Compilador extends javax.swing.JFrame {
     /**
      * Creates new form Compilador
      */
+    
+    static class CustomTabAction extends AbstractAction {
+        private static final String TAB = "    "; // Cuatro espacios por defecto
+
+        @Override
+        public void actionPerformed(ActionEvent e) {
+            JTextComponent textComponent = (JTextComponent) e.getSource();
+            Document doc = textComponent.getDocument();
+            int caretPosition = textComponent.getCaretPosition();
+
+            try {
+                doc.insertString(caretPosition, TAB, null);
+            } catch (BadLocationException ex) {
+                ex.printStackTrace();
+            }
+        }
+    }
+    
     public Compilador() {
         initComponents();
         init();
@@ -76,6 +103,16 @@ public class Compilador extends javax.swing.JFrame {
             colorAnalysis();
 
         });
+        
+        // Configura el comportamiento personalizado de la tecla Tab
+        InputMap inputMap = jtpCode.getInputMap(JComponent.WHEN_FOCUSED);
+        ActionMap actionMap = jtpCode.getActionMap();
+        
+        KeyStroke tabKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_TAB, 0);
+        inputMap.put(tabKeyStroke, "customTabAction");
+        actionMap.put("customTabAction", new CustomTabAction());
+
+        
         Functions.insertAsteriskInName(this, jtpCode, () -> {
             timerKeyReleased.restart();
         });
@@ -168,7 +205,7 @@ public class Compilador extends javax.swing.JFrame {
                 .addContainerGap(16, Short.MAX_VALUE))
         );
 
-        jtpCode.setFont(new java.awt.Font("Segoe UI", 0, 14)); // NOI18N
+        jtpCode.setFont(new java.awt.Font("Consolas", 0, 15)); // NOI18N
         jtpCode.setForeground(new java.awt.Color(204, 204, 204));
         jtpCode.setCaretColor(new java.awt.Color(204, 204, 204));
         jtpCode.setDisabledTextColor(new java.awt.Color(204, 204, 204));
@@ -210,9 +247,7 @@ public class Compilador extends javax.swing.JFrame {
         );
 
         jtaOutputConsole.setEditable(false);
-        jtaOutputConsole.setBackground(new java.awt.Color(60, 64, 64));
         jtaOutputConsole.setColumns(20);
-        jtaOutputConsole.setForeground(new java.awt.Color(255, 255, 255));
         jtaOutputConsole.setRows(5);
         jScrollPane2.setViewportView(jtaOutputConsole);
 
@@ -246,11 +281,11 @@ public class Compilador extends javax.swing.JFrame {
                         .addComponent(buttonsFilePanel, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE)
                         .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.RELATED, javax.swing.GroupLayout.DEFAULT_SIZE, Short.MAX_VALUE)
                         .addComponent(panelButtonCompilerExecute, javax.swing.GroupLayout.PREFERRED_SIZE, javax.swing.GroupLayout.DEFAULT_SIZE, javax.swing.GroupLayout.PREFERRED_SIZE))
-                    .addComponent(jScrollPane2, javax.swing.GroupLayout.PREFERRED_SIZE, 693, javax.swing.GroupLayout.PREFERRED_SIZE)
-                    .addComponent(jScrollPane1, javax.swing.GroupLayout.PREFERRED_SIZE, 693, javax.swing.GroupLayout.PREFERRED_SIZE))
+                    .addComponent(jScrollPane2, javax.swing.GroupLayout.DEFAULT_SIZE, 693, Short.MAX_VALUE)
+                    .addComponent(jScrollPane1))
                 .addPreferredGap(javax.swing.LayoutStyle.ComponentPlacement.UNRELATED)
-                .addComponent(jScrollPane3, javax.swing.GroupLayout.DEFAULT_SIZE, 546, Short.MAX_VALUE)
-                .addGap(17, 17, 17))
+                .addComponent(jScrollPane3, javax.swing.GroupLayout.PREFERRED_SIZE, 549, javax.swing.GroupLayout.PREFERRED_SIZE)
+                .addContainerGap(14, Short.MAX_VALUE))
         );
         rootPanelLayout.setVerticalGroup(
             rootPanelLayout.createParallelGroup(javax.swing.GroupLayout.Alignment.LEADING)
@@ -364,6 +399,7 @@ public class Compilador extends javax.swing.JFrame {
         identProd = new ArrayList<>();
         funAritProd = new ArrayList<>();
         impProd = new ArrayList<>();
+        cicProd = new ArrayList<>();
         identificadores = new HashMap<>();
 
 
@@ -424,11 +460,13 @@ public class Compilador extends javax.swing.JFrame {
         gramatica.group("IMPRIMIR_VALOR", "IMPRIMIR PARENTESIS_A VALOR", 9, "error sintactico: falta cerrar el parentesis [#, %]");
         gramatica.group("IMPRIMIR_VALOR", "IMPRIMIR", 10, "error sintactico: falta el valor a imprimir cerrado entre parentesis [#, %]");
 
+        
+        
         // sentencias
-        gramatica.group("SENTENCIAS", "(VARIABLE_PC | FUNCION_COMP_PC | IMPRIMIR_VALOR)");
+        gramatica.group("SENTENCIAS", "(VARIABLE_PC | FUNCION_COMP_PC | IMPRIMIR_VALOR | OPERACION_ARITMETICA_COM_PC)");
 
         // agrupacion de estructuras de control        
-        gramatica.group("EST_CONTROL_COMP", "CICLO PARENTESIS_A VALOR PARENTESIS_C", true);
+        gramatica.group("EST_CONTROL_COMP", "CICLO PARENTESIS_A (VALOR | IDENTIFICADOR) PARENTESIS_C", true, cicProd);
 
         // errores en estructuras de control
         gramatica.group("EST_CONTROL_COMP", "CICLO PARENTESIS_A VALOR", true, 11, "error sintactico: falta cerrar un parentesis [#, %]");
@@ -493,9 +531,9 @@ public class Compilador extends javax.swing.JFrame {
 
         // Mapeo de tipos de datos a expresiones regulares
         HashMap<String, String> tipoDatoExpresionRegular = new HashMap<>();
-        tipoDatoExpresionRegular.put("num", "-?\\d+");
+        tipoDatoExpresionRegular.put("num", "-?\\d+(\\.\\d+)?");
         tipoDatoExpresionRegular.put("bol", "ver|fal");
-        tipoDatoExpresionRegular.put("cad", "-?\\d+(\\.\\d+)?");
+        tipoDatoExpresionRegular.put("cad", "'.*'");
 
         //** ------------------------------------------------------
         // Correcta asignacion de variables y funciones aritmeticas
@@ -614,6 +652,28 @@ public class Compilador extends javax.swing.JFrame {
             if (imp.lexicalCompRank(2).equals("IDENTIFICADOR")) {
                 String variableName = imp.lexemeRank(2);
                 verificarExistenciaVariable(variableName, imp);                    
+            }
+
+        }
+        
+        
+        //** ---------------------------------------------
+        // Verificar si la variable existe para los ciclos
+        //** ---------------------------------------------
+        for (Production cic : cicProd) {
+            System.out.println(cic.lexemeRank(0, -1)); // Código del lenguaje
+            System.out.println(cic.lexicalCompRank(0, -1)); // Palabras como NUMERO o BOOLEANO
+            
+            if(!cic.lexicalCompRank(2).equals("NUMERO") && !cic.lexicalCompRank(2).equals("IDENTIFICADOR")){
+                errors.add(new ErrorLSSL(1, "Error semántico: se esperaban tipos de datos de tipo NUMERO [#, %]", cic, true));
+            }
+            else if (cic.lexicalCompRank(2).equals("IDENTIFICADOR")) {
+                String variableName = cic.lexemeRank(2);
+                if(verificarExistenciaVariable(variableName, cic)){
+                    if(!identificadores.get(cic.lexemeRank(2)).matches(tipoDatoExpresionRegular.get("num"))){
+                        errors.add(new ErrorLSSL(1, "Error semántico: se esperaban tipos de datos de tipo NUMERO [#, %]", cic, true));
+                    }
+                }                 
             }
 
         }
@@ -738,8 +798,8 @@ public class Compilador extends javax.swing.JFrame {
 
         /* Create and display the form */
         java.awt.EventQueue.invokeLater(() -> {
-            try {
-                UIManager.setLookAndFeel(new FlatDarkLaf());
+            try {         
+                UIManager.setLookAndFeel(new FlatDarkPurpleIJTheme());
             } catch (UnsupportedLookAndFeelException ex) {
                 System.out.println("LookAndFeel no soportado: " + ex);
             }
