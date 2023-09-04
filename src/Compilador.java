@@ -24,6 +24,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.util.ArrayList;
 import java.util.HashMap;
+import javax.management.StringValueExp;
 import javax.swing.AbstractAction;
 import javax.swing.ActionMap;
 import javax.swing.InputMap;
@@ -49,6 +50,7 @@ public class Compilador extends javax.swing.JFrame {
     private Timer timerKeyReleased;
     private ArrayList<Production> identProd;
     private ArrayList<Production> funAritProd;
+    private ArrayList<Production> funComProd;
     private ArrayList<Production> cicProd;
     private ArrayList<Production> impProd;
     private HashMap<String, String> identificadores;
@@ -57,8 +59,8 @@ public class Compilador extends javax.swing.JFrame {
     /**
      * Creates new form Compilador
      */
-    
     static class CustomTabAction extends AbstractAction {
+
         private static final String TAB = "    "; // Cuatro espacios por defecto
 
         @Override
@@ -74,7 +76,7 @@ public class Compilador extends javax.swing.JFrame {
             }
         }
     }
-    
+
     public Compilador() {
         initComponents();
         init();
@@ -103,16 +105,15 @@ public class Compilador extends javax.swing.JFrame {
             colorAnalysis();
 
         });
-        
+
         // Configura el comportamiento personalizado de la tecla Tab
         InputMap inputMap = jtpCode.getInputMap(JComponent.WHEN_FOCUSED);
         ActionMap actionMap = jtpCode.getActionMap();
-        
+
         KeyStroke tabKeyStroke = KeyStroke.getKeyStroke(KeyEvent.VK_TAB, 0);
         inputMap.put(tabKeyStroke, "customTabAction");
         actionMap.put("customTabAction", new CustomTabAction());
 
-        
         Functions.insertAsteriskInName(this, jtpCode, () -> {
             timerKeyReleased.restart();
         });
@@ -398,6 +399,7 @@ public class Compilador extends javax.swing.JFrame {
 
         identProd = new ArrayList<>();
         funAritProd = new ArrayList<>();
+        funComProd = new ArrayList<>();
         impProd = new ArrayList<>();
         cicProd = new ArrayList<>();
         identificadores = new HashMap<>();
@@ -408,6 +410,9 @@ public class Compilador extends javax.swing.JFrame {
 
         /* Agrupacion de valores*/
         gramatica.group("VALOR", "(NUMERO | BOOLEANO | CADENA)", true);
+
+        // operaciones comparativas
+        gramatica.group("OPERACION_COMPARATIVA", "FUNCION_COMPARACION PARENTESIS_A (VALOR | IDENTIFICADOR) COMA (VALOR | IDENTIFICADOR) PARENTESIS_C", true, funComProd);
 
         // operaciones matematicas
         gramatica.group("OPERACION_ARITMETICA", "FUNCION_ARITMETICA PARENTESIS_A (VALOR | IDENTIFICADOR) COMA (VALOR | IDENTIFICADOR) PARENTESIS_C", true, funAritProd);
@@ -423,7 +428,7 @@ public class Compilador extends javax.swing.JFrame {
 
         // operacion aritmetica completa
         /* Declaracion de variables */
-        gramatica.group("VARIABLE", "TIPO_DATO IDENTIFICADOR ASIGNACION (VALOR | IDENTIFICADOR | OPERACION_ARITMETICA)", true, identProd);
+        gramatica.group("VARIABLE", "TIPO_DATO IDENTIFICADOR ASIGNACION (VALOR | IDENTIFICADOR | OPERACION_ARITMETICA | OPERACION_COMPARATIVA)", true, identProd);
 
         /* errores */
         gramatica.group("VARIABLE", "TIPO_DATO ASIGNACION (VALOR | IDENTIFICADOR)", true, 2, "error sintactico: falta el identificador en la variable [#, %]");
@@ -455,15 +460,19 @@ public class Compilador extends javax.swing.JFrame {
         // funciones aritmeticas incompletas
         gramatica.group("OPERACION_ARITMETICA_COM_PC", "OPERACION_ARITMETICA", true, 21, "error sintactico: falta finalizar sentencia con punto y coma [#, %]");
 
+        // funciones comparativas completas
+        gramatica.group("OPERACION_COMPARATIVA_COM_PC", "OPERACION_COMPARATIVA FIN_SENTENCIA", true);
+
+        // funciones comparativas incompletas
+        gramatica.group("OPERACION_COMPARATIVA_COM_PC", "OPERACION_COMPARATIVA", true, 21, "error sintactico: falta finalizar sentencia con punto y coma [#, %]");
+
         // errores en imprimir
         gramatica.group("IMPRIMIR_VALOR", "IMPRIMIR PARENTESIS_A VALOR PARENTESIS_C", 8, "error sintactico: falta un punto y coma [#, %]");
         gramatica.group("IMPRIMIR_VALOR", "IMPRIMIR PARENTESIS_A VALOR", 9, "error sintactico: falta cerrar el parentesis [#, %]");
         gramatica.group("IMPRIMIR_VALOR", "IMPRIMIR", 10, "error sintactico: falta el valor a imprimir cerrado entre parentesis [#, %]");
 
-        
-        
         // sentencias
-        gramatica.group("SENTENCIAS", "(VARIABLE_PC | FUNCION_COMP_PC | IMPRIMIR_VALOR | OPERACION_ARITMETICA_COM_PC)");
+        gramatica.group("SENTENCIAS", "(VARIABLE_PC | FUNCION_COMP_PC | IMPRIMIR_VALOR | OPERACION_ARITMETICA_COM_PC | OPERACION_COMPARATIVA_COM_PC)");
 
         // agrupacion de estructuras de control        
         gramatica.group("EST_CONTROL_COMP", "CICLO PARENTESIS_A (VALOR | IDENTIFICADOR) PARENTESIS_C", true, cicProd);
@@ -569,76 +578,150 @@ public class Compilador extends javax.swing.JFrame {
 
             if (id.lexicalCompRank(3).equals("FUNCION_ARITMETICA") && !isIde) {
                 isFun = true;
-                String val1 = "";
-                String val2 = "";
+                if (id.lexemeRank(0).equals("num")) {
+                    String val1 = "";
+                    String val2 = "";
 
-                if (id.lexicalCompRank(5).equals("NUMERO")) {
-                    val1 = id.lexemeRank(5);
-                } else if (id.lexicalCompRank(5).equals("IDENTIFICADOR")) {
-                    if (!verificarIdentificador(id, 5)) {
-                        errors.add(new ErrorLSSL(1, "Error semántico: se esperaban tipos de datos de tipo NUMERO [#, %]", id, true));
-                    } else {
-                        val1 = identificadores.get(id.lexemeRank(5));
-                    }
-
-                }
-
-                if (id.lexicalCompRank(7).equals("NUMERO")) {
-                    val2 = id.lexemeRank(7);
-                } else if (id.lexicalCompRank(7).equals("IDENTIFICADOR")) {
-                    if (!verificarIdentificador(id, 7)) {
-                        errors.add(new ErrorLSSL(1, "Error semántico: se esperaban tipos de datos de tipo NUMERO [#, %]", id, true));
-                    } else {
-                        val2 = identificadores.get(id.lexemeRank(7));
-                    }
-                }
-
-                if (!val1.isEmpty() && !val2.isEmpty()) {
-                    double numero1 = Double.parseDouble(val1);
-                    double numero2 = Double.parseDouble(val2);
-                    double resultado = 0.0; // Inicializar el resultado
-
-                    // Realizar las operaciones según el operador
-                    if (id.lexemeRank(3).equals("sumar")) {
-                        resultado = numero1 + numero2;
-                    } else if (id.lexemeRank(3).equals("restar")) {
-                        resultado = numero1 - numero2;
-                    } else if (id.lexemeRank(3).equals("multiplicar")) {
-                        resultado = numero1 * numero2;
-                    } else if (id.lexemeRank(3).equals("dividir")) {
-                        if (numero2 != 0.0) {
-                            resultado = numero1 / numero2;
+                    if (id.lexicalCompRank(5).equals("NUMERO")) {
+                        val1 = id.lexemeRank(5);
+                    } else if (id.lexicalCompRank(5).equals("IDENTIFICADOR")) {
+                        if (!verificarIdentificadorNumero(id, 5)) {
+                            errors.add(new ErrorLSSL(1, "Error semántico: se esperaban tipos de datos de tipo NUMERO [#, %]", id, true));
                         } else {
-                            errors.add(new ErrorLSSL(1, "Error semántico: división entre cero [#, %]", id, true));
+                            val1 = identificadores.get(id.lexemeRank(5));
+                        }
+
+                    }
+
+                    if (id.lexicalCompRank(7).equals("NUMERO")) {
+                        val2 = id.lexemeRank(7);
+                    } else if (id.lexicalCompRank(7).equals("IDENTIFICADOR")) {
+                        if (!verificarIdentificadorNumero(id, 7)) {
+                            errors.add(new ErrorLSSL(1, "Error semántico: se esperaban tipos de datos de tipo NUMERO [#, %]", id, true));
+                        } else {
+                            val2 = identificadores.get(id.lexemeRank(7));
                         }
                     }
 
-                    // Guardar el resultado en el HashMap identificadores
-                    identificadores.put(id.lexemeRank(1), String.valueOf(resultado));
+                    if (!val1.isEmpty() && !val2.isEmpty()) {
+                        double numero1 = Double.parseDouble(val1);
+                        double numero2 = Double.parseDouble(val2);
+                        double resultado = 0.0; // Inicializar el resultado
+
+                        // Realizar las operaciones según el operador
+                        if (id.lexemeRank(3).equals("sumar")) {
+                            resultado = numero1 + numero2;
+                        } else if (id.lexemeRank(3).equals("restar")) {
+                            resultado = numero1 - numero2;
+                        } else if (id.lexemeRank(3).equals("multiplicar")) {
+                            resultado = numero1 * numero2;
+                        } else if (id.lexemeRank(3).equals("dividir")) {
+                            if (numero2 != 0.0) {
+                                resultado = numero1 / numero2;
+                            } else {
+                                errors.add(new ErrorLSSL(1, "Error semántico: división entre cero [#, %]", id, true));
+                            }
+                        }
+
+                        // Guardar el resultado en el HashMap identificadores
+                        identificadores.put(id.lexemeRank(1), String.valueOf(resultado));
+                    }
+                } else {
+                    errors.add(new ErrorLSSL(1, "Error semántico: el tipo de dato no es compatible [#, %]", id, true));
                 }
 
             }
 
-            if (!identDataType.get(id.lexemeRank(0)).equals(id.lexicalCompRank(-1)) && !isIde && !isFun) {
+            boolean isFunCom = false;
+
+            if (id.lexicalCompRank(3).equals("FUNCION_COMPARACION") && !isIde) {
+                isFunCom = true;
+                if (id.lexemeRank(0).equals("bol")) {
+                    String val1 = "";
+                    String val2 = "";
+
+                    if (id.lexicalCompRank(5).equals("NUMERO")) {
+                        val1 = id.lexemeRank(5);
+                    } else if (id.lexicalCompRank(5).equals("IDENTIFICADOR")) {
+                        if (!verificarIdentificadorNumero(id, 5)) {
+                            errors.add(new ErrorLSSL(1, "Error semántico: se esperaban tipos de datos de tipo NUMERO [#, %]", id, true));
+                        } else {
+                            val1 = identificadores.get(id.lexemeRank(5));
+                        }
+
+                    }
+
+                    if (id.lexicalCompRank(7).equals("NUMERO")) {
+                        val2 = id.lexemeRank(7);
+                    } else if (id.lexicalCompRank(7).equals("IDENTIFICADOR")) {
+                        if (!verificarIdentificadorNumero(id, 7)) {
+                            errors.add(new ErrorLSSL(1, "Error semántico: se esperaban tipos de datos de tipo NUMERO [#, %]", id, true));
+                        } else {
+                            val2 = identificadores.get(id.lexemeRank(7));
+                        }
+                    }
+
+                    if (!val1.isEmpty() && !val2.isEmpty()) {
+                        double numero1 = Double.parseDouble(val1);
+                        double numero2 = Double.parseDouble(val2);
+                        String resultado = ""; // Inicializar el resultado
+
+                        // Realizar las operaciones según el operador
+                        if (id.lexemeRank(3).equals("menor")) {
+                            resultado = (numero1 < numero2) ? "ver" : "fal";
+                        } else if (id.lexemeRank(3).equals("mayor")) {
+                            resultado = (numero1 > numero2) ? "ver" : "fal";
+                        } else if (id.lexemeRank(3).equals("igual")) {
+                            resultado = (numero1 == numero2) ? "ver" : "fal";
+                        }
+                        
+                        
+
+                        // Guardar el resultado en el HashMap identificadores
+                        identificadores.put(id.lexemeRank(1), resultado);
+                    }
+                } else {
+                    errors.add(new ErrorLSSL(1, "Error semántico: el tipo de dato no es compatible [#, %]", id, true));
+                }
+
+            }
+
+            if (!identDataType.get(id.lexemeRank(0)).equals(id.lexicalCompRank(-1)) && !isIde && !isFun && !isFunCom) {
                 errors.add(new ErrorLSSL(1, "error semantico: valor no compatible con el tipo de dato [#, %]", id, true));
-            } else if (!isIde && !isFun) {
+            } else if (!isIde && !isFun && !isFunCom) {
                 identificadores.put(id.lexemeRank(1), id.lexemeRank(-1));
             }
 
         }
-        
-        //** -----------------------------------------------
-        // Verificar si existen las variables para funciones
-        //** -----------------------------------------------
+
+        //** -----------------------------------------------------------
+        // Verificar si existen las variables para funciones aritmeticas
+        //** -----------------------------------------------------------
         for (Production funArit : funAritProd) {
             System.out.println(funArit.lexemeRank(0, -1)); // Código del lenguaje
             System.out.println(funArit.lexicalCompRank(0, -1)); // Palabras como NUMERO o BOOLEANO
 
-            boolean param1 = verificarIdentificador(funArit, 2);
-            boolean param2 = verificarIdentificador(funArit, 4);
+            boolean param1 = verificarIdentificadorNumero(funArit, 2);
+            boolean param2 = verificarIdentificadorNumero(funArit, 4);
 
             if (!((funArit.lexicalCompRank(2).equals("NUMERO") || param1) && (funArit.lexicalCompRank(4).equals("NUMERO") || param2))) {
                 errors.add(new ErrorLSSL(1, "Error semántico: se esperaban tipos de datos de tipo NUMERO [#, %]", funArit, true));
+            }
+        }
+
+        //** ------------------------------------------------------------
+        // Verificar si existen las variables para funciones comparativas
+        //** ------------------------------------------------------------
+        System.out.println("produccion comparativa");
+        for (Production funCom : funComProd) {
+            System.out.println(funCom.lexemeRank(0, -1)); // Código del lenguaje
+            System.out.println(funCom.lexicalCompRank(0, -1)); // Palabras como NUMERO o BOOLEANO
+
+            boolean param1 = verificarIdentificadorNumero(funCom, 2);
+            boolean param2 = verificarIdentificadorNumero(funCom, 4);
+
+            if (!((funCom.lexicalCompRank(2).equals("NUMERO") || param1) && (funCom.lexicalCompRank(4).equals("NUMERO") || param2))) {
+                errors.add(new ErrorLSSL(1, "Error semántico: se esperaban tipos de datos de tipo NUMERO [#, %]", funCom, true));
             }
         }
 
@@ -651,29 +734,27 @@ public class Compilador extends javax.swing.JFrame {
 
             if (imp.lexicalCompRank(2).equals("IDENTIFICADOR")) {
                 String variableName = imp.lexemeRank(2);
-                verificarExistenciaVariable(variableName, imp);                    
+                verificarExistenciaVariable(variableName, imp);
             }
 
         }
-        
-        
+
         //** ---------------------------------------------
         // Verificar si la variable existe para los ciclos
         //** ---------------------------------------------
         for (Production cic : cicProd) {
             System.out.println(cic.lexemeRank(0, -1)); // Código del lenguaje
             System.out.println(cic.lexicalCompRank(0, -1)); // Palabras como NUMERO o BOOLEANO
-            
-            if(!cic.lexicalCompRank(2).equals("NUMERO") && !cic.lexicalCompRank(2).equals("IDENTIFICADOR")){
+
+            if (!cic.lexicalCompRank(2).equals("NUMERO") && !cic.lexicalCompRank(2).equals("IDENTIFICADOR")) {
                 errors.add(new ErrorLSSL(1, "Error semántico: se esperaban tipos de datos de tipo NUMERO [#, %]", cic, true));
-            }
-            else if (cic.lexicalCompRank(2).equals("IDENTIFICADOR")) {
+            } else if (cic.lexicalCompRank(2).equals("IDENTIFICADOR")) {
                 String variableName = cic.lexemeRank(2);
-                if(verificarExistenciaVariable(variableName, cic)){
-                    if(!identificadores.get(cic.lexemeRank(2)).matches(tipoDatoExpresionRegular.get("num"))){
+                if (verificarExistenciaVariable(variableName, cic)) {
+                    if (!identificadores.get(cic.lexemeRank(2)).matches(tipoDatoExpresionRegular.get("num"))) {
                         errors.add(new ErrorLSSL(1, "Error semántico: se esperaban tipos de datos de tipo NUMERO [#, %]", cic, true));
                     }
-                }                 
+                }
             }
 
         }
@@ -691,10 +772,10 @@ public class Compilador extends javax.swing.JFrame {
             errors.add(new ErrorLSSL(1, "Error semántico: variable " + variableName + " no ha sido declarada", funArit, true));
             return false;
         }
-        return true;
+        return false;
     }
 
-    private boolean verificarIdentificador(Production funArit, int index) {
+    private boolean verificarIdentificadorNumero(Production funArit, int index) {
         if (funArit.lexicalCompRank(index).equals("IDENTIFICADOR")) {
             String variableName = funArit.lexemeRank(index);
 
@@ -703,6 +784,20 @@ public class Compilador extends javax.swing.JFrame {
                 return false;
             } else {
                 return identificadores.get(variableName).matches("-?\\d+(\\.\\d+)?");
+            }
+        }
+        return false;
+    }
+
+    private boolean verificarIdentificadorBooleano(Production funArit, int index) {
+        if (funArit.lexicalCompRank(index).equals("IDENTIFICADOR")) {
+            String variableName = funArit.lexemeRank(index);
+
+            if (!identificadores.containsKey(variableName)) {
+                errors.add(new ErrorLSSL(1, "Error semántico: variable " + variableName + " no ha sido declarada", funArit, true));
+                return false;
+            } else {
+                return identificadores.get(variableName).matches("ver|fal");
             }
         }
         return true;
@@ -798,7 +893,7 @@ public class Compilador extends javax.swing.JFrame {
 
         /* Create and display the form */
         java.awt.EventQueue.invokeLater(() -> {
-            try {         
+            try {
                 UIManager.setLookAndFeel(new FlatDarkPurpleIJTheme());
             } catch (UnsupportedLookAndFeelException ex) {
                 System.out.println("LookAndFeel no soportado: " + ex);

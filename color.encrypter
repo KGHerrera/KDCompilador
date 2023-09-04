@@ -1,16 +1,23 @@
 cad !cad1 = 'omaga ai din ai diyin';
 cad !cad2 = !cad1;
 
+bol !bol1 = ver;
+
+menor(10, 1);
+
+sumar(12, 12);
+
 num !ent1 = 20;
 num !dec2 = 100;
 cad !cad = 'megamente';
 
-sumar(10, !ent1);
+bol !bol1 = menor(10, 2);
+
+num !num1 = sumar(10, !dec2);
 
 cic(!ent1){
     cad !cad5 = 'megamente';
-    num !num2 = sumar(10, !ent1);
-
+    num !num2 = sumar(10, 10);
     cic(!num2){
         
     }
